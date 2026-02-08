@@ -435,8 +435,10 @@ export default function AdminDashboard() {
     
     logger.log({ type: 'INFO', event: `MEDIA_${action.toUpperCase()}`, message: `Solicitud ${action === 'paid' ? 'aprobada' : 'rechazada'}`, metadata: { media_id: id } });
     
+    const promise = supabase.from('media_uploads').update({ status: action }).eq('id', id).then();
+    
     toast.promise(
-      supabase.from('media_uploads').update({ status: action }).eq('id', id),
+      promise as unknown as Promise<any>,
       { loading: 'Procesando...', success: action === 'paid' ? 'Solicitud aprobada' : 'Solicitud rechazada', error: 'Error al actualizar' }
     );
   };
