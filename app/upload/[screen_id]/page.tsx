@@ -246,21 +246,8 @@ export default function UploadPage() {
             screen_id: screenId
           });
           
-          // Notify WS Server for Instant Update (if available)
-          try {
-             const wsHost = window.location.hostname;
-             const ws = new WebSocket(`ws://${wsHost}:8080`);
-             ws.onopen = () => {
-                ws.send(JSON.stringify({ 
-                    type: 'new-content', 
-                    screenId, 
-                    media: mediaData 
-                }));
-                ws.close();
-             };
-          } catch (e) {
-             console.warn('WS Notify failed (minor issue)', e);
-          }
+          // WS Notify removed - Supabase Realtime handles this automatically via database triggers
+          console.log('✅ Content uploaded and transaction recorded. Realtime subscribers will be notified automatically.');
       }
         
       // Cleanup removed

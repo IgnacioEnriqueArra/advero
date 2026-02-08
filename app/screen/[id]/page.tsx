@@ -76,85 +76,62 @@ export default function ScreenPage() {
     fetchScreenDetails();
   }, [screenId]);
 
-  // WebSocket Connection (Pure Speed)
+  // Supabase Realtime Subscription (Replaces WebSocket)
   useEffect(() => {
     if (!screenId) return;
 
-    const wsHost = hostOverride || window.location.hostname;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // If running on Vercel or production, use the current host but with correct protocol. 
-    // If you have a separate websocket server URL, it should be configured in env vars.
-    // For now assuming the WS server runs on port 8080 of the same host in dev, 
-    // or you need a dedicated WS URL for production.
-    
-    // NOTE: Vercel does not support long-running WebSocket servers in serverless functions.
-    // You likely need an external WS provider or a VPS for the socket server.
-    // Assuming for now you might be running this locally or on a VPS.
-    // If on Vercel, this local :8080 connection WILL FAIL.
-    
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || `${protocol}//${wsHost}:8080`;
-    
-    console.log(`Connecting to WS: ${wsUrl}`);
-    const ws = new WebSocket(wsUrl);
+    console.log('🔌 Connecting to Supabase Realtime for Screen:', screenId);
 
-    // Heartbeat
-    let heartbeatInterval: NodeJS.Timeout;
+    const channel = supabase
+      .channel(`screen-${screenId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'media_uploads',
+          filter: `screen_id=eq.${screenId}`
+        },
+        (payload) => {
+          const newMedia = payload.new as MediaUpload;
+          console.log('⚡ Realtime Update:', newMedia);
 
-    ws.onopen = () => {
-      console.log('WS Connected');
-      ws.send(JSON.stringify({ type: 'register', screenId }));
-      
-      // Start Heartbeat
-      heartbeatInterval = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'heartbeat', screenId }));
-        }
-      }, 10000);
-    };
+          // Only process PAID or APPROVED media
+          if (newMedia.status !== 'paid' && newMedia.status !== 'active') return;
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'new-content' && data.media) {
-          console.log('⚡ Pure WS Update:', data.media);
-          
           // 1. PRELOAD IMMEDIATELY (Ultra-Fast)
-          if (data.media.media_type === 'image') {
+          if (newMedia.media_type === 'image') {
             const img = new Image();
-            img.src = data.media.file_url;
-          } else if (data.media.media_type === 'video') {
+            img.src = newMedia.file_url;
+          } else if (newMedia.media_type === 'video') {
              const vid = document.createElement('video');
              vid.preload = 'auto';
-             vid.src = data.media.file_url;
+             vid.src = newMedia.file_url;
           }
 
           // 2. FORCE PLAYBACK START IF IDLE
           if (!currentMedia && !isProcessingRef.current) {
              console.log('🚀 Force starting playback from idle state');
-             setCurrentMedia(data.media);
+             setCurrentMedia(newMedia);
              setIsProcessing(true);
-             
-             // Report AD_START
-             if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'ad_start', screenId, mediaId: data.media.id }));
-             }
           }
 
           setPlaylist(prev => {
-             if (prev.some(p => p.id === data.media.id)) return prev;
-             const newPlaylist = [...prev, data.media];
+             if (prev.some(p => p.id === newMedia.id)) return prev;
+             const newPlaylist = [...prev, newMedia];
              playlistRef.current = newPlaylist; 
              return newPlaylist;
           });
         }
-      } catch (err) {
-        console.error('WS Error:', err);
-      }
-    };
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Realtime Subscribed');
+        }
+      });
 
     return () => {
-      clearInterval(heartbeatInterval);
-      ws.close();
+      supabase.removeChannel(channel);
     };
   }, [screenId]);
 
