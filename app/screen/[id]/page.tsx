@@ -81,7 +81,21 @@ export default function ScreenPage() {
     if (!screenId) return;
 
     const wsHost = hostOverride || window.location.hostname;
-    const ws = new WebSocket(`ws://${wsHost}:8080`);
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    // If running on Vercel or production, use the current host but with correct protocol. 
+    // If you have a separate websocket server URL, it should be configured in env vars.
+    // For now assuming the WS server runs on port 8080 of the same host in dev, 
+    // or you need a dedicated WS URL for production.
+    
+    // NOTE: Vercel does not support long-running WebSocket servers in serverless functions.
+    // You likely need an external WS provider or a VPS for the socket server.
+    // Assuming for now you might be running this locally or on a VPS.
+    // If on Vercel, this local :8080 connection WILL FAIL.
+    
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || `${protocol}//${wsHost}:8080`;
+    
+    console.log(`Connecting to WS: ${wsUrl}`);
+    const ws = new WebSocket(wsUrl);
 
     // Heartbeat
     let heartbeatInterval: NodeJS.Timeout;
